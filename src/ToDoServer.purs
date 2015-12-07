@@ -2,6 +2,7 @@ module ToDoServer where
 
 import Prelude hiding (apply)
 import Data.Maybe
+import Data.Int
 import Data.Array    as A
 import Data.Foldable (foldl)
 import Data.Foreign.EasyFFI
@@ -54,16 +55,12 @@ setDone id statedata =
 
 getTodosWithIndexes :: Array Todo -> Array IndexedTodo
 getTodosWithIndexes items =
-  (foldl
-    (\acc item -> 
-      acc {
-        array = A.snoc acc.array {id: acc.count, desc: item.desc, isDone: item.isDone }, 
-        count = acc.count + 1 
-      }
-    ) {count: 0, array: []} items).array
+  A.zipWith (\item idx -> {id: idx, desc: item.desc, isDone: item.isDone })
+            items
+            (A.range 0 $ A.length items)
 
 parseInt :: String -> Int
-parseInt = unsafeForeignFunction ["str"] "parseInt(str);"
+parseInt str = fromMaybe 0 $ fromString str
 
 
 -- Monadic handlers
