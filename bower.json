@@ -1,0 +1,11 @@
+{
+  "name": "purescript-express-todoserver",
+  "description": "Purescript Node Express example: ToDoServer",
+  "homepage": "https://github.com/kika/purescript-express-todoserver",
+  "dependencies": {
+    "purescript-console": "^0.1.1",
+    "purescript-express": "master",
+    "purescript-strings": "~0.7.1",
+    "purescript-refs": "~0.2.0"
+  }
+}

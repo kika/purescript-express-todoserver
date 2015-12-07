@@ -1,0 +1,8 @@
+{
+    "name": "purescript-express-todoserver",
+    "repository": "https://github.com/kika/purescript-express-todoserver",
+    "dependencies": {
+        "express": "~4.13.0",
+        "body-parser": "~1.13.2"
+    }
+}
