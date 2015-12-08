@@ -2,6 +2,7 @@ module ToDoServer where
 
 import Prelude hiding (apply)
 import Data.Maybe
+import Data.Either
 import Data.Int
 import Data.Array    as A
 import Data.Foldable (foldl)
@@ -16,42 +17,51 @@ import Node.Express.App
 import Node.Express.Handler
 import Node.HTTP (Server())
 
-
+--- Model type definitions 
 type Todo        = { desc :: String, isDone :: Boolean }
 type IndexedTodo = { id :: Int, desc :: String, isDone :: Boolean }
 
 -- Global state data
 type AppStateData = Array Todo
 type AppState     = Ref AppStateData
+type AppError     = String
 
 initState :: forall e. Eff (ref :: REF|e) AppState
 initState = newRef ([] :: AppStateData)
 
--- State manipulation functions
+{- 
+  Model manipulation functions
+  Each function receives current state data and returns a record with
+  the updated state and Either error or value. If no value is assumed 
+  then Unit is returned as a value. If Left error is returned then
+  the state is returned unchanged.
 
---- returns new state and new item ID as a record
---- compatible with Ref.modifyRef'
-addTodo :: Todo -> AppStateData -> { state :: AppStateData, value :: Int }
+  The returned record structure is compatible with modifyRef' function
+  and thus error could be examined as a return value from modifyRef'
+-}
+type ChangeResult a = { state :: AppStateData, value :: Either AppError a }
+
+addTodo :: Todo -> AppStateData -> ChangeResult Int
 addTodo todo statedata = 
-  { state: A.snoc statedata todo, value: A.length statedata + 1 }
+  { state: A.snoc statedata todo, value: Right (A.length statedata + 1) }
   
-updateTodo :: Int -> String -> AppStateData -> AppStateData 
+updateTodo :: Int -> String -> AppStateData -> ChangeResult Unit 
 updateTodo id newDesc statedata =
   case A.modifyAt id (\el -> el { desc = newDesc }) statedata of
-    Nothing  -> statedata
-    Just arr -> arr
+    Nothing  -> { state: statedata, value: Left "No such ID" }
+    Just arr -> { state: arr,       value: Right unit }
 
-deleteTodo :: Int -> AppStateData -> AppStateData
+deleteTodo :: Int -> AppStateData -> ChangeResult Unit
 deleteTodo id statedata =
   case A.deleteAt id statedata of
-    Nothing  -> statedata
-    Just arr -> arr 
+    Nothing  -> { state: statedata, value: Left "No such ID" }
+    Just arr -> { state: arr,       value: Right unit }
 
-setDone :: Int -> AppStateData -> AppStateData
+setDone :: Int -> AppStateData -> ChangeResult Unit
 setDone id statedata =
   case A.modifyAt id (\el -> el { isDone = true }) statedata of
-    Nothing  -> statedata
-    Just arr -> arr
+    Nothing  -> { state: statedata, value: Left "No such ID" }
+    Just arr -> { state: arr,       value: Right unit }
 
 getTodosWithIndexes :: Array Todo -> Array IndexedTodo
 getTodosWithIndexes items =
@@ -108,12 +118,14 @@ createTodoHandler state = do
 
 updateTodoHandler :: forall e. AppState -> Handler (ref :: REF | e)
 updateTodoHandler state = do
-  idParam <- getRouteParam "id"
+  idParam   <- getRouteParam "id"
   descParam <- getQueryParam "desc"
   case [idParam, descParam] of
     [Just id, Just desc] -> do
-      liftEff $ modifyRef state $ updateTodo (parseInt id) desc
-      sendJson {status: "Updated"}
+      res <- liftEff $ modifyRef' state $ updateTodo (parseInt id) desc
+      case res of 
+        Left msg -> nextThrow $ error msg
+        _        -> sendJson {status: "Updated"}
     _ -> nextThrow $ error "Id and Description are required"
 
 deleteTodoHandler :: forall e. AppState -> Handler (ref :: REF | e)
@@ -122,8 +134,10 @@ deleteTodoHandler state = do
   case idParam of
     Nothing -> nextThrow $ error "Id is required"
     Just id -> do
-      liftEff $ modifyRef state $ deleteTodo (parseInt id)
-      sendJson {status: "Deleted"}
+      res <- liftEff $ modifyRef' state $ deleteTodo (parseInt id)
+      case res of 
+        Left msg -> nextThrow $ error msg
+        _        -> sendJson {status: "Deleted"}
 
 doTodoHandler :: forall e. AppState -> Handler (ref :: REF | e)
 doTodoHandler state = do
@@ -131,8 +145,10 @@ doTodoHandler state = do
   case idParam of
     Nothing -> nextThrow $ error "Id is required"
     Just id -> do
-      liftEff $ modifyRef state $ setDone (parseInt id)
-      sendJson {status: "Done"}
+      res <- liftEff $ modifyRef' state $ setDone (parseInt id)
+      case res of 
+        Left msg -> nextThrow $ error msg
+        _        -> sendJson {status: "Done"}
 
 appSetup :: forall e. AppState -> App (ref :: REF, console :: CONSOLE | e)
 appSetup state = do
